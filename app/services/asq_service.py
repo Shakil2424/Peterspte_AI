@@ -27,17 +27,19 @@ def assess_audio_answer(file, CORRECT_ANSWERS):
     # Prepare response based on correctness
     if is_correct:
         return {
-            "Content": True,
-            "Fluency": 5,
-            "Pronunciation": 5,
-            "Speaking": 1,
-            "Listening": 1,
+            "content": True,
+            "fluency": 1,
+            "pronunciation": 1,
+            "speaking": 1,
+            "listening": 1,
+            "transcript": transcript,   
         }
     else:
         return {
-            "Content": False,
-            "Fluency": 0,
-            "Pronunciation": 0,
-            "Speaking": 0,
-            "Listening": 0,
+            "content": False,
+            "fluency": 0,
+            "pronunciation": 0,
+            "speaking": 0,
+            "listening": 0,
+            "transcript": transcript,
         }
