@@ -110,8 +110,8 @@ def dictation_ai(user_text, reference_text):
         
             "word_highlights": result_highlights,
             # "overall": total_score,
-            # "listening": listening_writing_score,
-            # "writing": listening_writing_score,
+            "listening": user_score,
+            "writing": user_score,
             "score": user_score,
             "max_score": total_score,
             "summary": user_text
