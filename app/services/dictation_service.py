@@ -105,7 +105,7 @@ def dictation_ai(user_text, reference_text):
         user_score = max(0, user_score - 0.5)
     # listening_writing_score = (90 / total_score) * user_score if total_score > 0 else 0
     return {
-        "score": {
+        
             "matching_words": matching_words,
         
             "word_highlights": result_highlights,
@@ -115,7 +115,7 @@ def dictation_ai(user_text, reference_text):
             "score": user_score,
             "max_score": total_score,
             "summary": user_text
-        },
+        
         # "overall": total_score,
         # "max_score": 90
     } 
