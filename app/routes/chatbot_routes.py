@@ -1,4 +1,6 @@
-from flask import Blueprint, request, jsonify, Response
+
+
+from flask import Blueprint, request, jsonify, Response, stream_with_context
 from app.services.chatbot_service import stream_chatbot_response
 import json
 
@@ -12,7 +14,21 @@ def chatbot():
     if not prompt:
         return jsonify({'error': 'Missing prompt'}), 400
     messages = [{"role": "user", "content": prompt}]
-    return Response(stream_chatbot_response(messages, model), mimetype='text/plain')
+
+    @stream_with_context
+    def generate():
+        try:
+            for chunk in stream_chatbot_response(messages, model):
+                yield chunk
+        except Exception as e:
+            yield f"\n[Stream Error: {str(e)}]\n"
+
+    return Response(generate(), mimetype='text/plain', headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",  # disable nginx buffering if using nginx proxy
+        "Content-Encoding": "none"
+    })
+
 
 @chatbot_bp.route('/swt_chatbot', methods=['POST'])
 def swt_chatbot():
@@ -20,8 +36,10 @@ def swt_chatbot():
     reference = data.get('reference')
     summary = data.get('summary')
     model = data.get('model', 'llama3')
+
     if not reference or not summary:
         return jsonify({'error': 'Missing reference or summary'}), 400
+
     prompt = (
         f"Reference: {reference}\n"
         f"Summary: {summary}\n"
@@ -33,8 +51,19 @@ def swt_chatbot():
         "- Is exactly one complete sentence, not a list or fragmented\n"
         "Do not mention any scores, marks, or rubric points in your response."
     )
+
     messages = [{"role": "user", "content": prompt}]
-    response_text = ""
-    for chunk in stream_chatbot_response(messages, model):
-        response_text += chunk
-    return jsonify({'response': response_text}), 200
+
+    @stream_with_context
+    def generate():
+        try:
+            for chunk in stream_chatbot_response(messages, model):
+                yield chunk
+        except Exception as e:
+            yield f"\n[Stream Error: {str(e)}]\n"
+
+    return Response(generate(), content_type="text/plain", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Content-Encoding": "none"
+    })
