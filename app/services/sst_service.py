@@ -311,30 +311,35 @@ def evaluate_sst_service(summary, reference):
         error_text = summary[error.offset:error.offset+error.errorLength]
         error_words = error_text.split()
         
-        # Find matching words in highlights
+        # Find matching words in highlights (more robust matching)
         for i, highlight in enumerate(word_highlights):
-            if highlight['word'] in error_words:
+            # Clean the highlight word (remove punctuation)
+            clean_highlight = highlight['word'].rstrip('.,!?;:')
+            if clean_highlight in error_words or highlight['word'] in error_words:
                 word_highlights[i] = {
                     "word": highlight['word'],
                     "status": "grammar",
                     "replacement": error.replacements[0] if error.replacements else None,
                 }
-                break  # Only highlight the first occurrence
+                # Don't break - highlight all matching words
     
     # Process spelling errors
     for error in spelling_errors:
         error_text = summary[error.offset:error.offset+error.errorLength]
         error_words = error_text.split()
         suggestions = error.replacements[:3] if error.replacements else []
-        # Find matching words in highlights
+        
+        # Find matching words in highlights (more robust matching)
         for i, highlight in enumerate(word_highlights):
-            if highlight['word'] in error_words:
+            # Clean the highlight word (remove punctuation)
+            clean_highlight = highlight['word'].rstrip('.,!?;:')
+            if clean_highlight in error_words or highlight['word'] in error_words:
                 word_highlights[i] = {
                     "word": highlight['word'],
                     "status": "spelling",
                     "suggestions": suggestions,
                 }
-                break  # Only highlight the first occurrence
+                # Don't break - highlight all matching words
     
     # === Final Total ===
     total = sum(scores.values())

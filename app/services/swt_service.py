@@ -58,13 +58,15 @@ def evaluate_summary_service(summary, reference):
         error_text = summary[error.offset:error.offset+error.errorLength]
         error_words = error_text.split()
         for i, highlight in enumerate(word_highlights):
-            if highlight['word'] in error_words:
+            # Clean the highlight word (remove punctuation)
+            clean_highlight = highlight['word'].rstrip('.,!?;:')
+            if clean_highlight in error_words or highlight['word'] in error_words:
                 word_highlights[i] = {
                     "word": highlight['word'],
                     "status": "grammar",
                     "replacement": error.replacements[0] if error.replacements else None,
                 }
-                break
+                # Don't break - highlight all matching words
     
     # Process spelling errors (show in word highlights but don't affect score)
     for error in spelling_errors:
@@ -72,13 +74,15 @@ def evaluate_summary_service(summary, reference):
         error_words = error_text.split()
         suggestions = error.replacements[:3] if error.replacements else []
         for i, highlight in enumerate(word_highlights):
-            if highlight['word'] in error_words:
+            # Clean the highlight word (remove punctuation)
+            clean_highlight = highlight['word'].rstrip('.,!?;:')
+            if clean_highlight in error_words or highlight['word'] in error_words:
                 word_highlights[i] = {
                     "word": highlight['word'],
                     "status": "spelling",
                     "suggestions": suggestions,
                 }
-                break
+                # Don't break - highlight all matching words
     # === Final Total ===
     total = sum(scores.values())
     scores['total'] = total
