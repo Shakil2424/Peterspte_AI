@@ -7,7 +7,7 @@ from .chatbot_routes import chatbot_bp
 from .pronunciation_routes import pronunciation_bp
 from .fluency_routes import fluency_bp
 from .respond_situation_routes import respond_situation_bp
-
+from .summarize_group_routes import summarize_group_bp
 
 routes = [
     asq_bp,
@@ -19,5 +19,6 @@ routes = [
     pronunciation_bp,
     fluency_bp,
     respond_situation_bp,
+    summarize_group_bp,
     # Add more routers here
 ]
