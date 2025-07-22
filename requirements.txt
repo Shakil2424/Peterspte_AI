@@ -10,6 +10,6 @@ sentence-transformers>=2.2.0
 language-tool-python>=2.7.1
 nltk>=3.8.1
 lexicalrichness>=0.1.1 
-
+librosa
 
 
