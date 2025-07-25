@@ -59,11 +59,31 @@ def allowed_file(file):
     return False
 
 # --- Global WhisperX Model Initialization ---
-device = "cuda" if torch.cuda.is_available() else "cpu"
-compute_type = "float16" if device == "cuda" else "int8"
-logger.info(f"🖥️ Loading WhisperX model at startup on device: {device}")
-WHISPERX_MODEL = whisperx.load_model("base", device=device, compute_type=compute_type)
-logger.info("✅ WhisperX model loaded and ready.")
+def load_whisperx_model():
+    try:
+        if torch.cuda.is_available():
+            device = "cuda"
+            compute_type = "float16"
+            try:
+                model = whisperx.load_model("base", device=device, compute_type=compute_type)
+                # Try a simple CUDA operation to trigger any cuDNN errors
+                torch.zeros(1).to(device)
+                print("Loaded WhisperX on GPU")
+                return model, device
+            except Exception as e:
+                print(f"CUDA/cuDNN error: {e}. Falling back to CPU.")
+        # If CUDA not available or error, fall back to CPU
+        device = "cpu"
+        compute_type = "int8"
+        model = whisperx.load_model("base", device=device, compute_type=compute_type)
+        print("Loaded WhisperX on CPU")
+        return model, device
+    except Exception as e:
+        print(f"Failed to load WhisperX model: {e}")
+        raise
+
+# Usage
+model, device = load_whisperx_model()
 
 def simple_transcribe(audio_file):
     """
@@ -82,7 +102,7 @@ def simple_transcribe(audio_file):
         
         # Simple transcription with minimal options
         logger.info("🎯 Transcribing...")
-        result = WHISPERX_MODEL.transcribe(audio_file, language="en")
+        result = model.transcribe(audio_file, language="en")
         
         logger.info("✅ Transcription complete!")
         
