@@ -10,6 +10,12 @@ import logging
 
 nltk.download('punkt', quiet=True)
 
+# --- Global SentenceTransformer Model Initialization ---
+MODEL_NAME = 'all-MiniLM-L6-v2'
+logging.info(f"Loading SentenceTransformer model '{MODEL_NAME}' at startup...")
+SENTENCE_TRANSFORMER_MODEL = SentenceTransformer(MODEL_NAME)
+logging.info("✅ SentenceTransformer model loaded and ready.")
+
 # Provided ContinuousContentScorer
 class ContinuousContentScorer:
     """
@@ -22,12 +28,12 @@ class ContinuousContentScorer:
     - Final Score: PTE-style score (10-90 range)
     """
     
-    def __init__(self, model_name: str = 'all-MiniLM-L6-v2'):
+    def __init__(self, model=None):
         try:
-            self.model = SentenceTransformer(model_name)
-            logging.info(f"Loaded model: {model_name}")
+            self.model = model if model is not None else SENTENCE_TRANSFORMER_MODEL
+            logging.info(f"Using SentenceTransformer model: {MODEL_NAME}")
         except Exception as e:
-            logging.error(f"Failed to load model {model_name}: {e}")
+            logging.error(f"Failed to load model {MODEL_NAME}: {e}")
             raise
         self.subjective_words = {
             'think', 'feel', 'believe', 'guess', 'suppose', 'assume', 'reckon',
@@ -291,7 +297,7 @@ def evaluate_summarize_group(reference_text: str, file, upload_folder: str):
         audio, sr = librosa.load(tmp_path, sr=16000)
         duration_sec = librosa.get_duration(y=audio, sr=sr)
         # Content scoring
-        scorer = ContinuousContentScorer()
+        scorer = ContinuousContentScorer(model=SENTENCE_TRANSFORMER_MODEL)
         content_result = scorer.score(reference_text, transcript)
         content_score = max(10, min(90, round(content_result.get('final_score', 10))))
         # Pronunciation

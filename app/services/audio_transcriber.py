@@ -58,6 +58,13 @@ def allowed_file(file):
     logger.warning(f"File rejected: {file.filename} (ext: {ext}, mimetype: {mimetype})")
     return False
 
+# --- Global WhisperX Model Initialization ---
+device = "cuda" if torch.cuda.is_available() else "cpu"
+compute_type = "float16" if device == "cuda" else "int8"
+logger.info(f"🖥️ Loading WhisperX model at startup on device: {device}")
+WHISPERX_MODEL = whisperx.load_model("base", device=device, compute_type=compute_type)
+logger.info("✅ WhisperX model loaded and ready.")
+
 def simple_transcribe(audio_file):
     """
     Simple, stable transcription function using whisperx
@@ -70,27 +77,14 @@ def simple_transcribe(audio_file):
             logger.error(f"❌ File not found: {audio_file}")
             return None
         
-        # Device setup - force CPU if GPU issues
-        device = "cpu"  # Start with CPU for stability
-        compute_type = "int8"
-        
+        # Use global model
         logger.info(f"🖥️ Using device: {device}")
-        
-        # Load smaller, more stable model
-        logger.info("📥 Loading base model...")
-        model = whisperx.load_model("base", device=device, compute_type=compute_type)
-        
-        logger.info("✅ Model loaded!")
         
         # Simple transcription with minimal options
         logger.info("🎯 Transcribing...")
-        result = model.transcribe(audio_file, language="en")
+        result = WHISPERX_MODEL.transcribe(audio_file, language="en")
         
         logger.info("✅ Transcription complete!")
-        
-        # Clean up memory
-        del model
-        gc.collect()
         
         return result
         
