@@ -9,6 +9,7 @@ from .fluency_routes import fluency_bp
 from .respond_situation_routes import respond_situation_bp
 from .summarize_group_routes import summarize_group_bp
 from .repeat_sentence_routes import repeat_sentence_bp
+from .retell_lecture_routes import retell_lecture_bp
 
 routes = [
     asq_bp,
@@ -22,5 +23,6 @@ routes = [
     respond_situation_bp,
     summarize_group_bp,
     repeat_sentence_bp,
+    retell_lecture_bp,
     # Add more routers here
 ]
