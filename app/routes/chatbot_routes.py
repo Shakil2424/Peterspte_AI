@@ -112,3 +112,46 @@ def sst_chatbot():
         "X-Accel-Buffering": "no",
         "Content-Encoding": "none"
     })
+
+
+@chatbot_bp.route('/write_essay_chatbot', methods=['POST'])
+def write_essay_chatbot():
+    data = request.get_json()
+    reference = data.get('reference')
+    essay = data.get('essay')
+    model = data.get('model', 'llama3')
+
+    if not reference or not essay:
+        return jsonify({'error': 'Missing reference or essay'}), 400
+
+    prompt_essay = (
+        f"Essay Reference: {reference}\n"
+        f"Student Essay: {essay}\n"
+        "Please evaluate this essay and provide:\n"
+        "1. Overall assessment of how well it addresses the reference\n"
+        "2. Specific feedback on content, structure, and language use\n"
+        "3. Suggestions for improvement in each area\n"
+        "4. A brief summary of strengths and weaknesses\n\n"
+        "Focus on:\n"
+        "- Content relevance and completeness\n"
+        "- Essay structure and coherence\n"
+        "- Grammar and vocabulary usage\n"
+        "- Overall writing quality\n\n"
+        "Provide constructive, specific feedback that would help improve the essay."
+    )
+
+    messages = [{"role": "user", "content": prompt_essay}]
+
+    @stream_with_context
+    def generate():
+        try:
+            for chunk in stream_chatbot_response(messages, model):
+                yield chunk
+        except Exception as e:
+            yield f"\n[Stream Error: {str(e)}]\n"
+
+    return Response(generate(), content_type="text/plain", headers={
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+        "Content-Encoding": "none"
+    })

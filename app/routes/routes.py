@@ -10,6 +10,7 @@ from .respond_situation_routes import respond_situation_bp
 from .summarize_group_routes import summarize_group_bp
 from .repeat_sentence_routes import repeat_sentence_bp
 from .retell_lecture_routes import retell_lecture_bp
+from .write_essay_routes import write_essay_bp
 
 routes = [
     asq_bp,
@@ -24,5 +25,6 @@ routes = [
     summarize_group_bp,
     repeat_sentence_bp,
     retell_lecture_bp,
+    write_essay_bp,
     # Add more routers here
 ]
