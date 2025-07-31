@@ -160,6 +160,10 @@ def evaluate_retell_lecture(reference_text, file, upload_folder):
         content_score = content_result.pop('final_score')
         pronunciation = score_pronunciation(transcript, audio, sr, duration_sec)
         fluency = score_fluency(transcript, audio, sr, duration_sec)
+        
+        # === SPEAKING AND LISTENING SCORES ===
+        speaking = ((fluency * 80) / 100) + ((pronunciation * 20) / 100)
+        listening = ((content_score * 80) / 100) + ((pronunciation * 20) / 100)
     finally:
         os.remove(tmp_path)
     return {
@@ -167,5 +171,7 @@ def evaluate_retell_lecture(reference_text, file, upload_folder):
         'content_score': content_score,
         'content_details': content_result,
         'pronunciation_score': pronunciation,
-        'fluency_score': fluency
+        'fluency_score': fluency,
+        'speaking_score': float(round(speaking, 2)),
+        'listening_score': float(round(listening, 2))
     }, 200 
