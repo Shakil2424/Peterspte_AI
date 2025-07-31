@@ -11,6 +11,7 @@ language-tool-python>=2.7.1
 nltk>=3.8.1
 lexicalrichness>=0.1.1 
 librosa
+jiwer>=3.0.3
 
 
     
