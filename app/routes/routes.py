@@ -12,6 +12,7 @@ from .repeat_sentence_routes import repeat_sentence_bp
 from .retell_lecture_routes import retell_lecture_bp
 from .write_essay_routes import write_essay_bp
 from .read_aloud_routes import read_aloud_bp
+from .describe_image_routes import describe_image_bp
 
 routes = [
     asq_bp,
@@ -28,5 +29,6 @@ routes = [
     retell_lecture_bp,
     write_essay_bp,
     read_aloud_bp,
+    describe_image_bp,
     # Add more routers here
 ]
