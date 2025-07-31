@@ -188,6 +188,13 @@ def evaluate_repeat_sentence(reference_text, file, upload_folder):
         if content <= 10:
             pronunciation = 10
             fluency = 10
+        
+        # === SPEAKING AND LISTENING SCORES ===
+        # Calculate a pronunciation score for speaking calculation
+        score = pronunciation  # Using pronunciation_score as the base score
+        
+        speaking = ((fluency * 80) / 100) + ((score * 20) / 100)
+        listening = ((content * 80) / 100) + ((score * 20) / 100)
     finally:
         os.remove(tmp_path)
     return {
@@ -195,5 +202,7 @@ def evaluate_repeat_sentence(reference_text, file, upload_folder):
         'content_score': content,
         'pronunciation_score': pronunciation,
         'fluency_score': fluency,
+        'speaking_score': float(round(speaking, 2)),
+        'listening_score': float(round(listening, 2)),
         'word_highlights': word_highlights
     }, 200 
