@@ -69,13 +69,13 @@ def evaluate_read_aloud(audio_file, reference_text):
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
             if tag == 'equal':
                 correct_words += (i2 - i1)
-                word_feedback.extend([(ref_words[i], "Good") for i in range(i1, i2)])
+                word_feedback.extend([(ref_words[i], "good") for i in range(i1, i2)])
             elif tag == 'replace':
-                word_feedback.extend([(ref_words[i], "Average") for i in range(i1, i2)])
+                word_feedback.extend([(ref_words[i], "average") for i in range(i1, i2)])
             elif tag == 'delete':
-                word_feedback.extend([(ref_words[i], "Missing") for i in range(i1, i2)])
+                word_feedback.extend([(ref_words[i], "missing") for i in range(i1, i2)])
             elif tag == 'insert':
-                word_feedback.extend([(asr_words[j], "Extra") for j in range(j1, j2)])
+                word_feedback.extend([(asr_words[j], "extra") for j in range(j1, j2)])
         
         # Content score based on word accuracy only (direct matching)
         word_accuracy = (correct_words / total_words) if total_words > 0 else 0
@@ -148,11 +148,11 @@ def evaluate_read_aloud(audio_file, reference_text):
             'composite_score': float(composite_score),
             'speaking_score': float(round(speaking, 2)),
             'reading_score': float(round(reading, 2)),
+            'word_highlights': word_feedback,
             'details': {
                 'transcribed_text': str(asr_text),
                 'reference_text': str(reference_text),
                 'word_accuracy': float(word_accuracy),
-                'word_feedback': word_feedback,
                 'speech_rate': float(speech_rate),
                 'wer_value': float(wer_value),
                 'pron_accuracy_pct': float(pron_accuracy_pct),
