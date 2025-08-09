@@ -4,7 +4,7 @@ import re
 import math
 from collections import Counter
 import nltk
-from nltk.tokenize import word_tokenize
+from nltk.tokenize import word_tokenize, sent_tokenize
 
 # Download required NLTK data
 try:
@@ -216,25 +216,221 @@ def evaluate_sst_vocabulary(text):
     
     return int(final_score)
 
+def get_sst_content_rubric_description(score):
+    """Get the rubric description for the given SST content score"""
+    rubric_descriptions = {
+        4: "The source text is summarised comprehensively, demonstrating full comprehension of the source text. Paraphrasing is used effectively to communicate a clear and accurate summary, and extraneous details are removed. All main ideas are correctly identified and synthesized in a concise and coherent manner. Summary flows smoothly and makes skilled use of appropriate and varied connective devices.",
+        3: "The source text is summarised adequately, demonstrating good comprehension of the source text. Paraphrasing is used, but not consistently well, and extraneous details may interfere with the clarity of the summary. Main ideas are correctly identified, with some minor omissions. Ideas are connected, but not synthesized efficiently. Summary can be followed logically and makes effective use of simple or repetitive connective devices.",
+        2: "The source text is summarised partially, demonstrating basic comprehension of the source text. There is no discernment between main points and peripheral detail. Ideas are identified, but the response relies heavily on repeating excerpts from the source text without synthesizing ideas and reformulating in own words. Repetitive or inappropriate connective devices are used to join ideas. Response can be followed with effort.",
+        1: "The response is relevant but not meaningfully summarised, demonstrating limited comprehension of the source text. The response is composed of disconnected ideas or excerpts from the source text without any context or attempt at synthesis. Main ideas are omitted or misrepresented. The response lacks coherence and is difficult to follow.",
+        0: "Response is too limited to assign a higher score and demonstrates no comprehension of the source text."
+    }
+    return rubric_descriptions.get(score, "Unknown score level")
+
+def evaluate_sst_content_comprehension(summary, reference):
+    """
+    Evaluate SST content using the new 4-point rubric
+    """
+    # Calculate semantic similarity
+    emb_ref = sbert_model.encode(reference, convert_to_tensor=True)
+    emb_sum = sbert_model.encode(summary, convert_to_tensor=True)
+    similarity = util.cos_sim(emb_ref, emb_sum).item()
+    
+    # Extract key ideas from reference
+    def extract_key_ideas(text):
+        """Extract main ideas from text using sentence importance"""
+        try:
+            sentences = sent_tokenize(text)
+        except LookupError:
+            # Fallback if punkt is not available
+            sentences = [s.strip() + '.' for s in text.split('.') if s.strip()]
+        
+        # Simple keyword-based importance scoring
+        important_keywords = ['because', 'however', 'therefore', 'consequently', 'although', 'despite', 'while', 'when', 'if', 'then', 'but', 'and', 'or', 'so', 'yet', 'nevertheless', 'furthermore', 'moreover', 'additionally', 'in addition', 'for example', 'such as', 'specifically', 'particularly', 'especially', 'notably', 'significantly', 'importantly', 'crucially', 'essentially']
+        
+        sentence_scores = []
+        for sentence in sentences:
+            score = 0
+            words = sentence.lower().split()
+            for keyword in important_keywords:
+                if keyword in words:
+                    score += 1
+            # Bonus for longer sentences (more detailed)
+            if len(words) > 10:
+                score += 0.5
+            sentence_scores.append((sentence, score))
+        
+        # Return top sentences by score
+        sentence_scores.sort(key=lambda x: x[1], reverse=True)
+        return [sent for sent, score in sentence_scores[:3] if score > 0]
+    
+    reference_ideas = extract_key_ideas(reference)
+    summary_ideas = extract_key_ideas(summary)
+    
+    # Calculate idea coverage
+    idea_coverage = 0
+    if reference_ideas:
+        covered_ideas = 0
+        for ref_idea in reference_ideas:
+            ref_idea_emb = sbert_model.encode(ref_idea, convert_to_tensor=True)
+            max_sim = 0
+            for sum_idea in summary_ideas:
+                sum_idea_emb = sbert_model.encode(sum_idea, convert_to_tensor=True)
+                sim = util.cos_sim(ref_idea_emb, sum_idea_emb).item()
+                max_sim = max(max_sim, sim)
+            if max_sim > 0.6:
+                covered_ideas += 1
+        idea_coverage = covered_ideas / len(reference_ideas) if reference_ideas else 0
+    
+    # Calculate paraphrasing quality
+    def calculate_paraphrasing_score(summary, reference):
+        """Calculate how well the summary paraphrases the reference"""
+        # Count unique words that are not common function words
+        summary_words = set(word.lower().strip('.,!?;:') for word in summary.split() if len(word) > 3)
+        reference_words = set(word.lower().strip('.,!?;:') for word in reference.split() if len(word) > 3)
+        
+        # Remove common words
+        common_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those', 'it', 'its', 'they', 'them', 'their', 'we', 'us', 'our', 'you', 'your', 'i', 'me', 'my'}
+        
+        summary_unique = summary_words - common_words
+        reference_unique = reference_words - common_words
+        
+        # Calculate overlap vs copying
+        overlap = len(summary_unique.intersection(reference_unique))
+        total_summary = len(summary_unique)
+        
+        if total_summary == 0:
+            return 0
+        
+        # Calculate copying ratio
+        copying_ratio = overlap / total_summary
+        
+        # More lenient scoring - consider that some overlap is normal and good
+        if copying_ratio <= 0.4:
+            paraphrasing_score = 1.0  # Excellent paraphrasing
+        elif copying_ratio <= 0.6:
+            paraphrasing_score = 0.8  # Good paraphrasing
+        elif copying_ratio <= 0.8:
+            paraphrasing_score = 0.5  # Moderate paraphrasing
+        else:
+            paraphrasing_score = 0.2  # Poor paraphrasing (mostly copying)
+        
+        return paraphrasing_score
+    
+    paraphrasing_score = calculate_paraphrasing_score(summary, reference)
+    
+    # Calculate connective devices usage
+    def calculate_connector_diversity(summary):
+        """Calculate the diversity and appropriateness of connective devices"""
+        connectors = [
+            'because', 'however', 'therefore', 'consequently', 'although', 'despite', 
+            'while', 'when', 'if', 'then', 'but', 'and', 'or', 'so', 'yet', 'nevertheless', 
+            'furthermore', 'moreover', 'additionally', 'in addition', 'for example', 
+            'such as', 'specifically', 'particularly', 'especially', 'notably', 
+            'significantly', 'importantly', 'crucially', 'essentially', 'first', 'second', 
+            'finally', 'also', 'too', 'as well', 'meanwhile', 'similarly', 'likewise', 
+            'in contrast', 'on the other hand'
+        ]
+        
+        summary_lower = summary.lower()
+        used_connectors = [conn for conn in connectors if conn in summary_lower]
+        connector_diversity = len(used_connectors)
+        
+        return connector_diversity
+    
+    connector_diversity = calculate_connector_diversity(summary)
+    
+    # Calculate coherence and flow
+    def calculate_coherence_score(summary):
+        """Calculate the coherence and flow of the summary"""
+        try:
+            sentences = sent_tokenize(summary) if len(summary) > 10 else [summary]
+        except LookupError:
+            sentences = [summary]
+        
+        if len(sentences) < 2:
+            return 0.5
+        
+        # Calculate average sentence length
+        avg_sentence_length = sum(len(sent.split()) for sent in sentences) / len(sentences)
+        
+        # Check for logical flow indicators
+        flow_indicators = ['first', 'second', 'third', 'finally', 'also', 'furthermore', 'moreover', 'however', 'nevertheless', 'therefore', 'consequently']
+        flow_count = sum(1 for indicator in flow_indicators if indicator.lower() in summary.lower())
+        
+        # Coherence score based on sentence structure and flow
+        coherence_score = min(1.0, (avg_sentence_length / 15) + (flow_count / len(sentences)))
+        
+        return coherence_score
+    
+    coherence_score = calculate_coherence_score(summary)
+    
+    # Calculate conciseness ratio (avoid unnecessary details)
+    def calculate_conciseness_ratio(summary, reference):
+        """Calculate how concise the summary is relative to the reference"""
+        summary_words = len(summary.split())
+        reference_words = len(reference.split())
+        
+        if reference_words == 0:
+            return 0
+        
+        conciseness_ratio = summary_words / reference_words
+        # Ideal ratio is between 0.3 and 0.5 for summaries
+        if 0.3 <= conciseness_ratio <= 0.5:
+            return 1.0
+        elif 0.2 <= conciseness_ratio <= 0.6:
+            return 0.7
+        elif 0.1 <= conciseness_ratio <= 0.7:
+            return 0.4
+        else:
+            return 0.1
+    
+    conciseness_ratio = calculate_conciseness_ratio(summary, reference)
+    
+    # Score 4: Comprehensive summary with full comprehension
+    if (similarity >= 0.70 and idea_coverage >= 0.6 and paraphrasing_score >= 0.2 and 
+        connector_diversity >= 2 and coherence_score >= 0.5 and conciseness_ratio >= 0.2):
+        score = 4
+    
+    # Score 3: Adequate summary with good comprehension
+    elif (similarity >= 0.60 and idea_coverage >= 0.4 and paraphrasing_score >= 0.1 and 
+          connector_diversity >= 1 and coherence_score >= 0.3):
+        score = 3
+    
+    # Score 2: Partial summary with basic comprehension
+    elif (similarity >= 0.50 and idea_coverage >= 0.2 and paraphrasing_score >= 0.05 and 
+          connector_diversity >= 1):
+        score = 2
+    
+    # Score 1: Limited summary with minimal comprehension
+    elif (similarity >= 0.35 and idea_coverage >= 0.05):
+        score = 1
+    
+    # Score 0: No comprehension
+    else:
+        score = 0
+    
+    # Return both score and analysis data
+    return score, {
+        'similarity': similarity,
+        'idea_coverage': idea_coverage,
+        'paraphrasing_score': paraphrasing_score,
+        'connector_diversity': connector_diversity,
+        'coherence_score': coherence_score,
+        'conciseness_ratio': conciseness_ratio
+    }
+
 def evaluate_sst_service(summary, reference):
     """
     Evaluate SST (Summarize Spoken Text) across 5 criteria
     """
     scores = {}
     
-    # === 1. Content (2 points) ===
-    emb_ref = sbert_model.encode(reference, convert_to_tensor=True)
-    emb_sum = sbert_model.encode(summary, convert_to_tensor=True)
-    similarity = util.cos_sim(emb_ref, emb_sum).item()
+    # === 1. Content (0-4 points) - NEW 4-point rubric ===
+    content_score, content_analysis = evaluate_sst_content_comprehension(summary, reference)
+    scores['content'] = content_score
     
-    if similarity >= 0.85:
-        scores['content'] = 2
-    elif similarity >= 0.70:
-        scores['content'] = 1
-    else:
-        scores['content'] = 0
-    
-    # === 2. Form (Length & Structure) (2 points) ===
+    # === 2. Form (Length & Structure) (0-2 points) ===
     words = summary.strip().split()
     word_count = len(words)
     sentence_count = len(re.findall(r'[.!?]', summary.strip()))
@@ -258,7 +454,7 @@ def evaluate_sst_service(summary, reference):
     else:
         scores['form'] = 0
     
-    # === 3. Grammar (2 points) ===
+    # === 3. Grammar (0-2 points) ===
     try:
         matches = lang_tool.check(summary)
         print(f"LanguageTool found {len(matches)} total matches")
@@ -279,10 +475,10 @@ def evaluate_sst_service(summary, reference):
         print(f"Grammar check error: {e}")
         scores['grammar'] = 2  # Default to perfect if tool fails
     
-    # === 4. Vocabulary (2 points) ===
+    # === 4. Vocabulary (0-2 points) ===
     scores['vocabulary'] = evaluate_sst_vocabulary(summary)
     
-    # === 5. Spelling (2 points) ===
+    # === 5. Spelling (0-2 points) ===
     try:
         spelling_errors = [m for m in matches if m.ruleIssueType in ("spelling", "misspelling")]
         num_spelling_errors = len(spelling_errors)
@@ -341,7 +537,7 @@ def evaluate_sst_service(summary, reference):
                 }
                 # Don't break - highlight all matching words
     
-    # === Final Total ===
+    # === Final Total (updated for 4-point content) ===
     total = sum(scores.values())
     scores['total'] = total
     
@@ -349,7 +545,10 @@ def evaluate_sst_service(summary, reference):
     scores['details'] = {
         'word_count': word_count,
         'sentence_count': sentence_count,
-        'similarity': similarity,
+        'content_analysis': {
+            **content_analysis,
+            'rubric_level': get_sst_content_rubric_description(content_score)
+        },
         'grammar_errors': [err.message for err in grammar_errors],
         'spelling_errors': [err.message for err in spelling_errors],
         'form_issues': {
