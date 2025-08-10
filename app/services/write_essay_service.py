@@ -5,6 +5,7 @@ import re
 import nltk
 from nltk.tokenize import word_tokenize, sent_tokenize
 from collections import Counter
+import math
 
 # Download required NLTK data
 try:
@@ -541,6 +542,9 @@ def evaluate_write_essay(essay, reference):
     # Maximum total: 6 + 2 + 6 + 2 + 6 + 2 + 2 = 26
     total = sum(scores.values())
     scores['total'] = total
+    
+    # Add score out of 90
+    scores['score'] = math.ceil((total / 26) * 90)
     
     # Add details for API response
     scores['details'] = {

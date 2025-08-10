@@ -541,6 +541,9 @@ def evaluate_sst_service(summary, reference):
     total = sum(scores.values())
     scores['total'] = total
     
+    # Add score out of 90
+    scores['score'] = math.ceil((total / 12) * 90)
+    
     # Add details for API response
     scores['details'] = {
         'word_count': word_count,

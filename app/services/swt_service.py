@@ -5,6 +5,7 @@ import re
 import nltk
 from nltk.tokenize import sent_tokenize, word_tokenize
 from collections import Counter
+import math
 
 # Download required NLTK data
 try:
@@ -171,6 +172,9 @@ def evaluate_summary_service(summary, reference):
     # === Final Total ===
     total = sum(scores.values())
     scores['total'] = total
+    
+    # Add score out of 90
+    scores['score'] = math.ceil((total / 9) * 90)
     
     # Add details for API response
     scores['details'] = {
