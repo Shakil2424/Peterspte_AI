@@ -14,7 +14,7 @@ except LookupError:
     nltk.download('punkt')
 
 # Load models
-sbert_model = SentenceTransformer('all-mpnet-base-v2')
+sbert_model = SentenceTransformer('all-mpnet-base-v2', device="cpu")
 
 def count_syllables(text):
     """Count syllables in text"""

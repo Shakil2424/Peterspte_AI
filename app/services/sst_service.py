@@ -13,7 +13,7 @@ except LookupError:
     nltk.download('punkt', quiet=True)
 
 # Load models/tools once
-sbert_model = SentenceTransformer('all-mpnet-base-v2')
+sbert_model = SentenceTransformer('all-mpnet-base-v2', device="cpu")
 lang_tool = language_tool_python.LanguageTool('en-US')
 
 def cefr_level(word):

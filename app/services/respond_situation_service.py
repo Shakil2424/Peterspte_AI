@@ -10,7 +10,7 @@ from app.services.audio_transcriber import transcribe_audio
 nltk.download('punkt', quiet=True)
 
 # Load models
-semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
+semantic_model = SentenceTransformer('all-MiniLM-L6-v2', device="cpu")
 
 # --- Content Scoring ---
 def semantic_similarity(reference: str, response: str) -> float:

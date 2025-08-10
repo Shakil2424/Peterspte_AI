@@ -13,7 +13,7 @@ nltk.download('punkt', quiet=True)
 # --- Global SentenceTransformer Model Initialization ---
 MODEL_NAME = 'all-MiniLM-L6-v2'
 logging.info(f"Loading SentenceTransformer model '{MODEL_NAME}' at startup...")
-SENTENCE_TRANSFORMER_MODEL = SentenceTransformer(MODEL_NAME)
+SENTENCE_TRANSFORMER_MODEL = SentenceTransformer(MODEL_NAME, device="cpu")
 logging.info("✅ SentenceTransformer model loaded and ready.")
 
 # Provided ContinuousContentScorer

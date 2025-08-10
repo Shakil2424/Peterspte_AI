@@ -136,9 +136,9 @@ def fluency():
         file.seek(0)
         file.save(tmp.name)
         tmp_path = tmp.name
-    # Transcribe using WhisperX (GPU if available, else CPU)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    compute_type = "float16" if device == "cuda" else "int8"
+    # Transcribe using WhisperX (Force CPU usage)
+    device = "cpu"  # Force CPU usage
+    compute_type = "int8"  # Use int8 for CPU
     model = whisperx.load_model("base", device=device, compute_type=compute_type)
     result = model.transcribe(tmp_path, language="en")
     if 'segments' in result and len(result['segments']) > 0:
