@@ -166,6 +166,24 @@ def score_fluency(transcript, audio, sr, duration_sec):
     final_score = max(10, min(90, round(average_raw, 2)))
     return final_score
 
+def calculate_content_penalty(content_score):
+    """Calculate penalty multiplier for pronunciation and fluency based on content score"""
+    if content_score >= 80:
+        return 1.0  # No penalty
+    elif content_score >= 60:
+        return 0.9  # 10% penalty
+    elif content_score >= 40:
+        return 0.7  # 30% penalty
+    elif content_score >= 20:
+        return 0.5  # 50% penalty
+    else:
+        return 0.3  # 70% penalty
+
+def apply_content_penalty(original_score, penalty_multiplier, min_score=10):
+    """Apply penalty to a score while maintaining minimum threshold"""
+    penalized_score = original_score * penalty_multiplier
+    return max(min_score, round(penalized_score, 2))
+
 def evaluate_repeat_sentence(reference_text, file, upload_folder):
     result, status_code = transcribe_audio(file, upload_folder)
     if status_code != 200:
@@ -183,18 +201,38 @@ def evaluate_repeat_sentence(reference_text, file, upload_folder):
         pronunciation = score_pronunciation(transcript, audio, sr, duration_sec, reference_text)
         fluency = score_fluency(transcript, audio, sr, duration_sec)
         
-        # === ADJUST SCORES BASED ON CONTENT ===
-        # If content score is 10, set pronunciation and fluency to 10 as well
+        # === ENHANCED CONTENT-BASED PENALTY SYSTEM ===
+        # Calculate penalty multiplier based on content performance
+        penalty_multiplier = calculate_content_penalty(content)
+        
+        # Apply penalties to pronunciation and fluency scores
+        original_pronunciation = pronunciation
+        original_fluency = fluency
+        
+        pronunciation = apply_content_penalty(pronunciation, penalty_multiplier)
+        fluency = apply_content_penalty(fluency, penalty_multiplier)
+        
+        # === SPECIAL CASE: IF CONTENT IS 10, SET ALL SCORES TO 10 ===
         if content <= 10:
             pronunciation = 10
             fluency = 10
         
         # === SPEAKING AND LISTENING SCORES ===
         # Calculate a pronunciation score for speaking calculation
-        score = pronunciation  # Using pronunciation_score as the base score
+        score = pronunciation  # Using penalized pronunciation_score as the base score
         
         speaking = ((fluency * 80) / 100) + ((score * 20) / 100)
         listening = ((content * 80) / 100) + ((score * 20) / 100)
+        
+        # Add penalty information to the response
+        penalty_info = {
+            "penalty_multiplier": penalty_multiplier,
+            "penalty_percentage": round((1 - penalty_multiplier) * 100, 1),
+            "original_pronunciation": original_pronunciation,
+            "original_fluency": original_fluency,
+            "penalized_pronunciation": pronunciation,
+            "penalized_fluency": fluency
+        }
     finally:
         os.remove(tmp_path)
     return {
@@ -204,5 +242,6 @@ def evaluate_repeat_sentence(reference_text, file, upload_folder):
         'fluency_score': fluency,
         'speaking_score': float(round(speaking, 2)),
         'listening_score': float(round(listening, 2)),
-        'word_highlights': word_highlights
+        'word_highlights': word_highlights,
+        'penalty_info': penalty_info
     }, 200 
