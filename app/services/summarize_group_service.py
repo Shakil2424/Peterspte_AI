@@ -76,24 +76,56 @@ class ContinuousContentScorer:
     def parse_transcript(self, transcript_text: str) -> dict:
         if not transcript_text:
             return {}
+        
+        logging.info(f"Parsing transcript: {transcript_text[:200]}...")
+        
         text = re.sub(r'Narrator?:\s*[^\.]+\.', '', transcript_text, flags=re.IGNORECASE)
-        text = re.sub(r'Narration:\s*[^\.]+\.', '', text, flags=re.IGNORECASE)
-        speaker_pattern = r'([A-Za-z]+\d*|[A-Z][a-z]+):\s*'
+        # Updated regex to handle "Speaker 1:" format with optional spaces
+        speaker_pattern = r'([A-Za-z]+\s*\d*|[A-Z][a-z]+):\s*'
         parts = re.split(speaker_pattern, text)
         parts = [part.strip() for part in parts if part.strip()]
+        
+        logging.info(f"Split parts: {parts[:5]}...")
+        
         speakers_dict = {}
         current_speaker = None
+        
         for i, part in enumerate(parts):
-            speaker_match = re.match(r'^[A-Za-z]+\d*$', part)
-            if speaker_match and i + 1 < len(parts):
-                current_speaker = part
+            # Check if this part is a speaker identifier (ends with colon or matches speaker pattern)
+            if re.match(r'^[A-Za-z]+\s*\d*$', part) or part.endswith(':'):
+                current_speaker = part.rstrip(':')  # Remove colon if present
+                logging.info(f"Found speaker: {current_speaker}")
                 continue
             elif current_speaker:
                 sentences = self.tokenize_sentences(part)
                 if current_speaker not in speakers_dict:
                     speakers_dict[current_speaker] = []
                 speakers_dict[current_speaker].extend(sentences)
+                logging.info(f"Added {len(sentences)} sentences for {current_speaker}")
                 current_speaker = None
+        
+        # If no speakers were parsed, try alternative parsing
+        if not speakers_dict:
+            logging.info("Primary parsing failed, trying fallback method...")
+            # Fallback: split by lines and look for speaker patterns
+            lines = transcript_text.split('\n')
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                # Look for "Speaker X:" pattern
+                speaker_match = re.match(r'^(Speaker\s*\d+):\s*(.*)', line, re.IGNORECASE)
+                if speaker_match:
+                    speaker_id = speaker_match.group(1)
+                    content = speaker_match.group(2).strip()
+                    if content:
+                        sentences = self.tokenize_sentences(content)
+                        if speaker_id not in speakers_dict:
+                            speakers_dict[speaker_id] = []
+                        speakers_dict[speaker_id].extend(sentences)
+                        logging.info(f"Fallback: Added {len(sentences)} sentences for {speaker_id}")
+        
+        logging.info(f"Final speakers dict: {list(speakers_dict.keys())}")
         return speakers_dict
     def compute_similarity_metrics(self, ref_embeddings, summary_embeddings):
         if ref_embeddings.shape[0] == 0 or summary_embeddings.shape[0] == 0:
@@ -106,24 +138,32 @@ class ContinuousContentScorer:
         if isinstance(reference_transcript, str):
             parsed_transcript = self.parse_transcript(reference_transcript)
             if not parsed_transcript:
-                return self._empty_score_result("Failed to parse transcript")
+                logging.error(f"Failed to parse transcript. Raw text: {reference_transcript[:500]}...")
+                return self._empty_score_result("Failed to parse transcript - no speakers identified")
         elif isinstance(reference_transcript, dict):
             parsed_transcript = reference_transcript
         else:
             return self._empty_score_result("Invalid reference transcript format")
+        
         if not parsed_transcript or not summary_text:
             return self._empty_score_result("Empty input provided")
+        
+        logging.info(f"Successfully parsed {len(parsed_transcript)} speakers")
+        
         summary_sentences = self.tokenize_sentences(summary_text)
         if not summary_sentences:
             return self._empty_score_result("No valid summary sentences found")
+        
         try:
             summary_embeddings = self.model.encode(summary_sentences, convert_to_tensor=True)
         except Exception as e:
             logging.error(f"Failed to encode summary: {e}")
             return self._empty_score_result("Summary encoding failed")
+        
         speaker_scores = {}
         all_max_similarities = []
         total_ref_sentences = 0
+        
         for speaker_id, sentences in parsed_transcript.items():
             if not sentences:
                 speaker_scores[speaker_id] = {
@@ -131,14 +171,17 @@ class ContinuousContentScorer:
                     'sentence_count': 0
                 }
                 continue
+            
             valid_sentences = [s for s in sentences if s and len(s.strip()) > 5]
             total_ref_sentences += len(valid_sentences)
+            
             if not valid_sentences:
                 speaker_scores[speaker_id] = {
                     'idea_coverage': 0.0,
                     'sentence_count': 0
                 }
                 continue
+            
             try:
                 ref_embeddings = self.model.encode(valid_sentences, convert_to_tensor=True)
                 max_sim_per_ref, _ = self.compute_similarity_metrics(ref_embeddings, summary_embeddings)
@@ -157,8 +200,12 @@ class ContinuousContentScorer:
                     'sentence_count': len(valid_sentences),
                     'error': str(e)
                 }
+        
         if not speaker_scores:
             return self._empty_score_result("No valid speaker data processed")
+        
+        logging.info(f"Processed {len(speaker_scores)} speakers with {total_ref_sentences} total sentences")
+        
         total_weighted_coverage = sum(
             scores['idea_coverage'] * scores['sentence_count']
             for scores in speaker_scores.values()
@@ -167,12 +214,17 @@ class ContinuousContentScorer:
             total_weighted_coverage / total_ref_sentences
             if total_ref_sentences > 0 else 0
         )
+        
         paraphrase_depth = self._calculate_paraphrase_depth(all_max_similarities)
         subjectivity_ratio = self.detect_subjectivity(summary_text)
         objectivity_penalty = min(subjectivity_ratio * 5, 1.0)
+        
         final_score = self._calculate_final_score(
             raw_idea_coverage, paraphrase_depth, objectivity_penalty
         )
+        
+        logging.info(f"Final score: {final_score}, Idea coverage: {raw_idea_coverage}, Paraphrase depth: {paraphrase_depth}")
+        
         return {
             'raw_idea_coverage': float(raw_idea_coverage),
             'paraphrase_depth': float(paraphrase_depth),
@@ -280,6 +332,25 @@ def score_fluency(transcript, audio, sr, duration_sec):
     final_score = max(10, min(90, round(average_raw, 2)))
     return final_score
 
+# --- Content-Based Penalty System ---
+def calculate_content_penalty(content_score):
+    """Calculate penalty multiplier for pronunciation and fluency based on content score"""
+    if content_score >= 80:
+        return 1.0  # No penalty
+    elif content_score >= 60:
+        return 0.9  # 10% penalty
+    elif content_score >= 40:
+        return 0.7  # 30% penalty
+    elif content_score >= 20:
+        return 0.5  # 50% penalty
+    else:
+        return 0.3  # 70% penalty
+
+def apply_content_penalty(original_score, penalty_multiplier, min_score=10):
+    """Apply penalty to a score while maintaining minimum threshold"""
+    penalized_score = original_score * penalty_multiplier
+    return max(min_score, round(penalized_score, 2))
+
 # --- Main Summarize Group Scoring Function ---
 def evaluate_summarize_group(reference_text: str, file, upload_folder: str):
     # Use existing transcribe_audio logic
@@ -304,6 +375,36 @@ def evaluate_summarize_group(reference_text: str, file, upload_folder: str):
         pronunciation_score = score_pronunciation(transcript, audio, sr, duration_sec)
         # Fluency
         fluency_score = score_fluency(transcript, audio, sr, duration_sec)
+        
+        # === ENHANCED CONTENT-BASED PENALTY SYSTEM ===
+        # Calculate penalty multiplier based on content performance
+        penalty_multiplier = calculate_content_penalty(content_score)
+        
+        # Apply penalties to pronunciation and fluency scores
+        original_pronunciation = pronunciation_score
+        original_fluency = fluency_score
+        
+        pronunciation_score = apply_content_penalty(pronunciation_score, penalty_multiplier)
+        fluency_score = apply_content_penalty(fluency_score, penalty_multiplier)
+        
+        # === SPECIAL CASE: IF CONTENT IS 10, SET ALL SCORES TO 10 ===
+        if content_score <= 10:
+            pronunciation_score = 10
+            fluency_score = 10
+        
+        # === SPEAKING AND LISTENING SCORES ===
+        speaking = ((fluency_score * 80) / 100) + ((pronunciation_score * 20) / 100)
+        listening = ((content_score * 80) / 100) + ((pronunciation_score * 20) / 100)
+        
+        # Add penalty information to the response
+        penalty_info = {
+            "penalty_multiplier": penalty_multiplier,
+            "penalty_percentage": round((1 - penalty_multiplier) * 100, 1),
+            "original_pronunciation": original_pronunciation,
+            "original_fluency": original_fluency,
+            "penalized_pronunciation": pronunciation_score,
+            "penalized_fluency": fluency_score
+        }
     finally:
         os.remove(tmp_path)
     return {
@@ -311,5 +412,32 @@ def evaluate_summarize_group(reference_text: str, file, upload_folder: str):
         'content_score': content_score,
         'pronunciation_score': pronunciation_score,
         'fluency_score': fluency_score,
-        'content_details': content_result
+        'speaking_score': float(round(speaking, 2)),
+        'listening_score': float(round(listening, 2)),
+        'content_details': content_result,
+        'penalty_info': penalty_info
     }, 200 
+
+# --- Test Function for Debugging ---
+def test_transcript_parsing():
+    """Test function to verify transcript parsing works correctly"""
+    test_transcript = """Narration: Three students are discussing whether to take early morning classes next semester at the campus coffee shop.
+Speaker 1: Have you guys planned your class schedule for next term? I'm thinking about taking three 8 a.m. classes.
+Speaker 2: I'm with you on that! I took two morning classes this semester and found I'm much more productive in the early hours.
+Speaker 3: Actually, I avoid early classes whenever possible. I signed up for an 8 a.m. lecture last semester and ended up sleeping through half of them."""
+    
+    scorer = ContinuousContentScorer()
+    parsed = scorer.parse_transcript(test_transcript)
+    
+    print("Test transcript parsing:")
+    print(f"Original text: {test_transcript[:100]}...")
+    print(f"Parsed speakers: {list(parsed.keys())}")
+    for speaker, sentences in parsed.items():
+        print(f"  {speaker}: {len(sentences)} sentences")
+        if sentences:
+            print(f"    First sentence: {sentences[0][:50]}...")
+    
+    return parsed
+
+if __name__ == "__main__":
+    test_transcript_parsing() 
